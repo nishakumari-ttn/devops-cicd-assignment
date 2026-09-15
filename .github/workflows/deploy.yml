@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 env:
@@ -14,9 +11,11 @@ env:
   S3_BUCKET: my-devops-cicd-assignment-2026-3732
 
 jobs:
-  validate:
-    name: Validate and package
+  deploy:
+    name: Test, package, and deploy
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -31,52 +30,21 @@ jobs:
       - name: Build / Package website
         run: |
           mkdir -p dist
-          cp index.html dist/
-          cp style.css dist/
-          cp script.js dist/
-
-      - name: Upload website artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: website
-          path: dist
-
-  deploy:
-    name: Deploy to S3
-    needs: validate
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download website artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: website
-          path: dist
-
-      - name: Check required secrets
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        run: |
-          missing=0
-          if [ -z "$AWS_ACCESS_KEY_ID" ]; then
-            echo "::error::Add repository secret AWS_ACCESS_KEY_ID (Settings → Secrets and variables → Actions)."
-            missing=1
-          fi
-          if [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-            echo "::error::Add repository secret AWS_SECRET_ACCESS_KEY (Settings → Secrets and variables → Actions)."
-            missing=1
-          fi
-          if [ "$missing" -ne 0 ]; then
-            exit 1
-          fi
+          cp index.html style.css script.js dist/
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Deploy to S3
-        run: aws s3 sync dist/ "s3://${S3_BUCKET}" --delete
+        run: |
+          echo "Deploying to s3://${S3_BUCKET} in ${AWS_REGION}"
+          if ! aws s3 ls "s3://${S3_BUCKET}" --region "${AWS_REGION}"; then
+            echo "::error::IAM user cannot access bucket ${S3_BUCKET}. In AWS IAM, open user github-actions-s3-deploy → Add permissions → Attach policies directly → AmazonS3FullAccess."
+            exit 1
+          fi
+          aws s3 sync dist/ "s3://${S3_BUCKET}" --region "${AWS_REGION}" --delete
+          echo "Deploy finished"

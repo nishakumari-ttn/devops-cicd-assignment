@@ -4,29 +4,38 @@ Static website deployed to Amazon S3 through GitHub Actions.
 
 ## Pipeline
 
-The workflow in `.github/workflows/deploy.yml`:
+Push to `main` runs `.github/workflows/deploy.yml`:
 
-- validates the required site files on pull requests and pushes to `main`;
-- packages `index.html`, `style.css`, and `script.js`;
-- deploys the package to S3 after validation succeeds on `main`.
+Test → Build / Package → Deploy to S3
 
-## Why the last run failed
+## GitHub secrets
 
-Run [Deploy Website to S3 #1](https://github.com/nishakumari-ttn/devops-cicd-assignment/actions/runs/34958723393) failed at **Configure AWS credentials**:
-
-`Credentials could not be loaded, please check your action inputs`
-
-That means GitHub Actions did not receive AWS keys. Add them as repository secrets before the deploy job can succeed.
-
-## Required GitHub secrets
-
-In the repository: **Settings → Secrets and variables → Actions → New repository secret**
+**Settings → Secrets and variables → Actions**
 
 | Secret name | Value |
 | --- | --- |
 | `AWS_ACCESS_KEY_ID` | IAM access key ID |
 | `AWS_SECRET_ACCESS_KEY` | IAM secret access key |
 
-The IAM user needs permission to list and write objects in `s3://my-devops-cicd-assignment-2026-3732` in `ap-south-1`. The bucket must already exist.
+Do not commit AWS keys.
 
-Do not commit AWS keys into the repository.
+## IAM permission required for deploy
+
+The latest failure happened after AWS login succeeded. `aws s3 sync` could not access the bucket.
+
+In AWS Console:
+
+1. **IAM → Users → github-actions-s3-deploy**
+2. **Add permissions → Attach policies directly**
+3. Select **AmazonS3FullAccess**
+4. Save
+
+Then re-run the GitHub Actions workflow.
+
+## Public website URL
+
+```text
+http://my-devops-cicd-assignment-2026-3732.s3-website.ap-south-1.amazonaws.com
+```
+
+Enable static website hosting on the bucket with index document `index.html`, and allow public read of objects so the reviewer can open that URL.
